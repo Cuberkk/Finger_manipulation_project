@@ -10,4 +10,3 @@ Gesture 1: 3 finger rotatory manipulation
     <li> Ring for Senosr 2</li>
 </ul>
 
-This is a test for git push
