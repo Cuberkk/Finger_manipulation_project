@@ -26,7 +26,7 @@ class MainReader:
         self.hz = int(hz)
         self.ni = NIDAQReaderDual(nidaq_cal1_path, nidaq_cal2_path, self.hz)
         self.lj = LabjackATIReader(lj_cal_path, self.hz)
-        self.bias_save_path = f"sensor_bias/Bias.csv"
+        self.bias_save_path = f"sensor_bias/bias_csv/Main_Bias.csv"
         if bias_switch:
             print("Computing bias on initialization...")
             self.compute_bias(time_period=30)  # Automatically compute bias on init; adjust time_period as needed
@@ -55,7 +55,7 @@ class MainReader:
         bias_json = {"NIDAQ_S1": bias[0:6].tolist(),
                      "NIDAQ_S2": bias[6:12].tolist(),
                      "LabJack_S3": bias[12:18].tolist()}
-        with open('sensor_bias/bias.json', 'w') as json_file:
+        with open('sensor_bias/bias_json/Main_Bias.json', 'w') as json_file:
             json.dump(bias_json, json_file, indent=4)
         return
     

@@ -79,3 +79,13 @@ class LabjackATIReader:
             ljm.close(self.handle)
         except Exception:
             pass
+
+if __name__ == "__main__":
+    lj = LabjackATIReader("ATI_calibration.cal", aq_rate=60)
+    try:
+        while True:
+            FT_lis = lj.read()
+            print(FT_lis)
+            time.sleep(1 / lj.scan_rate)
+    except KeyboardInterrupt:
+        lj.close()

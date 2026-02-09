@@ -1,6 +1,9 @@
+import csv
+import json
+import pandas as pd
+import time
 import numpy as np
 import xml.etree.ElementTree as ET
-
 try:
     import nidaqmx
     from nidaqmx.constants import TerminalConfiguration, AcquisitionType
@@ -30,6 +33,10 @@ class NIDAQReaderDual:
             np.hstack((self.cal1, zero6)),
             np.hstack((zero6, self.cal2))
         ))
+        
+        self.bias_save_path = f"sensor_bias/bias_csv/NIDAQ_Bias.csv"
+        self.bias_json_path = f"sensor_bias/bias_json/NIDAQ_Bias.json"
+        self.bias = np.zeros(12,)  # Placeholder for bias; can be set by compute_bias()
 
         # Configure an NI Task with differential channels
         self.task = nidaqmx.Task()
@@ -44,6 +51,8 @@ class NIDAQReaderDual:
             rate=self.aq_rate,
             sample_mode=AcquisitionType.CONTINUOUS
         )
+
+        self.task.start()
 
     def _read_cal(self, path):
         """Parse an ATI .cal XML file and return a robust 6x6 matrix in Fx,Fy,Fz,Tx,Ty,Tz row order."""
@@ -61,27 +70,80 @@ class NIDAQReaderDual:
             rows.append(vals)
         return np.array(rows).reshape(6, 6)
 
-    def read(self):
+    def read_raw(self):
         """
         Get one calibrated 12-element vector for the two NI sensors.
         Returns: np.ndarray shape (12,)
         """
         samples_available = self.task.in_stream.avail_samp_per_chan
+        # print(f"Samples available: {samples_available}")
         if samples_available > 0:
             # Discard old samples to minimize latency; keep only the most recent
             raw_data = self.task.read(number_of_samples_per_channel=samples_available)
             volts = np.array(raw_data)[:, -1].reshape(12,)
-            FT_lis = self.matrix.dot(volts).flatten()
-            if abs(FT_lis[0]) >= 24 or abs(FT_lis[1]) >= 24 or abs(FT_lis[2]) >= 24:
+            FT_arr = self.matrix.dot(volts).flatten()
+            if abs(FT_arr[0]) >= 24 or abs(FT_arr[1]) >= 24 or abs(FT_arr[2]) >= 24:
                 print("Warning: Sensor 1 Force approaching Limit!")
-            elif abs(FT_lis[3]) >= 240 or abs(FT_lis[4]) >= 240 or abs(FT_lis[5]) >= 240:
+            elif abs(FT_arr[3]) >= 240 or abs(FT_arr[4]) >= 240 or abs(FT_arr[5]) >= 240:
                 print("Warning: Sensor 1 Torque approaching Limit!")
 
-            if abs(FT_lis[6]) >= 45 or abs(FT_lis[7]) >= 45 or abs(FT_lis[8]) >= 265:
+            if abs(FT_arr[6]) >= 45 or abs(FT_arr[7]) >= 45 or abs(FT_arr[8]) >= 265:
                 print("Warning: Sensor 2 Force approaching Limit!")
-            elif abs(FT_lis[9]) >= 450 or abs(FT_lis[10]) >= 450 or abs(FT_lis[11]) >= 450:
+            elif abs(FT_arr[9]) >= 450 or abs(FT_arr[10]) >= 450 or abs(FT_arr[11]) >= 450:
                 print("Warning: Sensor 2 Torque approaching Limit!")
-        return FT_lis
+            return FT_arr
+        else:
+            print("No samples available, returning zeros.")
+            return np.zeros(12)
+        
+    def read_biased(self):
+        """
+        Get one calibrated 12-element vector for the two NI sensors with bias subtracted.
+        Returns: np.ndarray shape (12,)
+        """
+        samples_available = self.task.in_stream.avail_samp_per_chan
+        # print(f"Samples available: {samples_available}")
+        if samples_available > 0:
+            # Discard old samples to minimize latency; keep only the most recent
+            raw_data = self.task.read(number_of_samples_per_channel=samples_available)
+            volts = np.array(raw_data)[:, -1].reshape(12,)
+            FT_arr = self.matrix.dot(volts).flatten() - self.bias
+            if abs(FT_arr[0]) >= 24 or abs(FT_arr[1]) >= 24 or abs(FT_arr[2]) >= 24:
+                print("Warning: Sensor 1 Force approaching Limit!")
+            elif abs(FT_arr[3]) >= 240 or abs(FT_arr[4]) >= 240 or abs(FT_arr[5]) >= 240:
+                print("Warning: Sensor 1 Torque approaching Limit!")
+
+            if abs(FT_arr[6]) >= 45 or abs(FT_arr[7]) >= 45 or abs(FT_arr[8]) >= 265:
+                print("Warning: Sensor 2 Force approaching Limit!")
+            elif abs(FT_arr[9]) >= 450 or abs(FT_arr[10]) >= 450 or abs(FT_arr[11]) >= 450:
+                print("Warning: Sensor 2 Torque approaching Limit!")
+            return FT_arr
+        else:
+            print("No samples available, returning zeros.")
+            return np.zeros(12)
+        
+    def compute_bias(self, time_period = 30):
+        total_frames = int(self.aq_rate * time_period)
+        print(f"Computing bias over {time_period} seconds ({total_frames} frames at {self.aq_rate} Hz)...")
+        itr = 0
+        while itr < total_frames:
+            FT_arr = self.read_raw()
+            if np.all(FT_arr == 0):
+                print("No samples available during bias computation, skipping this frame.")
+                continue
+            mode = 'w' if itr == 0 else 'a'
+            with open(self.bias_save_path, mode, newline='') as csvfile:
+                write = csv.writer(csvfile)
+                write.writerow(FT_arr)
+            itr += 1
+            time.sleep(1 / self.aq_rate)
+        
+        bias = pd.read_csv(self.bias_save_path, delimiter=',', header=None).mean().values
+        self.bias = np.array(bias).reshape(12,)
+        bias_json = {"NIDAQ_S1": bias[0:6].tolist(),
+                     "NIDAQ_S2": bias[6:12].tolist()}
+        with open(self.bias_json_path, 'w') as json_file:
+            json.dump(bias_json, json_file, indent=4)
 
     def close(self):
         """Release NI resources."""
@@ -89,3 +151,16 @@ class NIDAQReaderDual:
             self.task.close()
         except Exception:
             pass
+
+if __name__ == "__main__":
+    ni = NIDAQReaderDual("calibration_files/FT44298.cal", "calibration_files/FT45281.cal", aq_rate=60)
+    itr = 0
+    try:
+        while True:
+            FT_lis = ni.read()
+            if itr % 5 == 0:
+                print(f"Sensor 1:\nFx: {FT_lis[0]:.2f}, Fy: {FT_lis[1]:.2f}, Fz: {FT_lis[2]:.2f},\nTx: {FT_lis[3]:.2f}, Ty: {FT_lis[4]:.2f}, Tz: {FT_lis[5]:.2f}\nSensor 2:\nFx: {FT_lis[6]:.2f}, Fy: {FT_lis[7]:.2f}, Fz: {FT_lis[8]:.2f},\nTx: {FT_lis[9]:.2f}, Ty: {FT_lis[10]:.2f}, Tz: {FT_lis[11]:.2f}\n")
+            itr += 1
+            time.sleep(1 / ni.aq_rate)
+    except KeyboardInterrupt:
+        ni.close()
