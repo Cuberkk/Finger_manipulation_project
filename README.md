@@ -13,3 +13,5 @@ Gesture 1: 3 finger rotatory manipulation
     <li> Index for Sensor 3</li>
     <li> Ring for Senosr 2</li>
 </ul>
+
+test
