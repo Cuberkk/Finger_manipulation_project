@@ -22,15 +22,17 @@ class MainReader:
       - This class does NOT save files or plot; it's just data access.
     """
 
-    def __init__(self, nidaq_cal1_path, nidaq_cal2_path, lj_cal_path, hz=60, bias_switch = True):
+    def __init__(self, nidaq_cal1_path, nidaq_cal2_path, lj_cal_path, bias_time=30, hz=60, bias_switch = True):
         self.hz = int(hz)
-        self.ni = NIDAQReaderDual(nidaq_cal1_path, nidaq_cal2_path, self.hz, bias_switch)
-        self.lj = LabjackATIReader(lj_cal_path, self.hz, bias_switch)
+        self.ni = NIDAQReaderDual(cal1_path = nidaq_cal1_path, cal2_path = nidaq_cal2_path, aq_rate = self.hz, bias_time=bias_time, bias_switch = bias_switch)
+        self.lj = LabjackATIReader(lj_cal_path, self.hz, bias_time=bias_time, bias_switch=bias_switch)
 
     def read(self):
         """Return one (18,) frame: [S1 Fx..Tz | S2 Fx..Tz | S3 Fx..Tz]."""
-        ni12 = self.ni.read()
+        
         lj6  = self.lj.read()
+        ni12 = self.ni.read()
+        
         return np.concatenate([ni12, lj6], axis=0)
 
     def close(self):
@@ -48,7 +50,7 @@ def main():
     nidaq_cal1_path = "calibration_files/FT44298.cal"
     nidaq_cal2_path = "calibration_files/FT45281.cal"
     lj_cal_path = "calibration_files/FT44297.cal"
-    reader = MainReader(nidaq_cal1_path, nidaq_cal2_path, lj_cal_path, hz=60, bias_switch = True)
+    reader = MainReader(nidaq_cal1_path, nidaq_cal2_path, lj_cal_path, bias_time=30, hz=60, bias_switch = True)
     print("Initialization complete. Starting to read data...")
     while True:
         biased_data = reader.read()

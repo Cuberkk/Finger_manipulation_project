@@ -16,12 +16,14 @@ class ContactEstimator:
         self.height = 21.993 # unit: mm
         self.H = 21.993 /2 # unit: mm
         self.radius = 40 # unit: mm
-        self.threshold = np.linalg.norm([force_error, force_error, force_error])
+        thresh_1 = np.linalg.norm([force_error, force_error, force_error])
+        thresh_2 = np.linalg.norm([force_error*3, force_error*3, force_error*3])
+        self.threshold_lis = [thresh_1, thresh_2, thresh_1]
         return
     
-    def estimate_contact(self, FT_arr):
+    def estimate_contact(self, FT_arr, force_threshold=0.25):
         total_force = np.linalg.norm(FT_arr[0:3])
-        if total_force < self.threshold:  # If force is too small, skip
+        if total_force < force_threshold:  # If force is too small, skip
             return np.zeros(6), 0, 0
         else:
             FT_prime = self.g_adj.dot(FT_arr)
@@ -30,25 +32,36 @@ class ContactEstimator:
             
             phi = math.atan(FT_prime[0]/-FT_prime[2])
             # phi = np.clip(phi, -np.pi/2, np.pi/2)
-            print(f"phi: {phi/np.pi*180:.2f}")
+            # print(f"phi: {phi/np.pi*180:.2f}")
             numerator = (FT_prime[0]* self.l + FT_prime[4])
             demominator = self.radius * np.sqrt(FT_prime[0]**2 + FT_prime[2]**2)
             sine_value = numerator / demominator
             sine_value = np.clip(sine_value, -1.0, 1.0)  # Ensure the value is within the valid range for arcsin
             # print(f"sine_value: {sine_value:.4f}")
             theta = (math.asin(sine_value) - phi)
-            print(f"theta: {theta/np.pi*180:.2f}")
+            # print(f"theta: {theta/np.pi*180:.2f}")
             FT_finger[1] = -FT_prime[0]*math.cos(theta) + FT_prime[2]*math.sin(theta)  # Fy
             FT_finger[2] = FT_prime[0]*math.sin(theta) + FT_prime[2]*math.cos(theta)  # Fz
             delta_h = (FT_prime[5] - FT_prime[1] *self.radius*math.sin(theta)) / FT_prime[0]
-            print(f"delta_h: {delta_h:.2f}")
+            # print(f"delta_h: {delta_h:.2f}")
             h = self.H + delta_h
             h = np.clip(h, 0, self.height)
-            print(f"h: {h:.2f}")
-            print(f"FT_finger: {FT_finger}")
-            print(f"FT_prime: {FT_prime}")
-            print()
+            # print(f"h: {h:.2f}")
+            # print(f"FT_finger: {FT_finger}")
+            # print(f"FT_prime: {FT_prime}")
+            # print()
             return FT_finger, -theta, h
+        
+    def estimate_contact_tri(self, FT_arr):
+        s1 = FT_arr[0:6]
+        s2 = FT_arr[6:12]
+        s3 = FT_arr[12:18]
+        fings_lis = []
+        for i, s in enumerate([s1, s2, s3]):
+            ft_finger, theta, h = self.estimate_contact(s, self.threshold_lis[i])
+            fings_lis.append(ft_finger)
+        fings_arr = np.array(fings_lis).flatten()
+        return fings_arr
 
 def main():
     nidaq_cal1_path = "calibration_files/FT44298.cal"

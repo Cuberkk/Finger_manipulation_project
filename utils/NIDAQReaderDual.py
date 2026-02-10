@@ -17,7 +17,7 @@ class NIDAQReaderDual:
       Sensor2: [Fx,Fy,Fz,Tx,Ty,Tz] indices 6..11
     """
 
-    def __init__(self, cal1_path, cal2_path, aq_rate=60, phys="Dev1/ai0:7,Dev1/ai16:19", bias_switch = True):
+    def __init__(self, cal1_path, cal2_path, aq_rate=60, phys="Dev1/ai0:7,Dev1/ai16:19",bias_time=30, bias_switch = True):
         # Guard: make failure explicit if NI-DAQmx isn't installed/available
         if nidaqmx is None:
             raise RuntimeError("nidaqmx not available. Install NI-DAQmx driver + Python package.")
@@ -38,12 +38,7 @@ class NIDAQReaderDual:
         
         self.bias_save_path = f"sensor_bias/bias_csv/NIDAQ_Bias.csv"
         self.bias_json_path = f"sensor_bias/bias_json/NIDAQ_Bias.json"
-        self.bias = np.zeros(self.sensor_len,)  # Placeholder for bias; can be set by compute_bias()
-        if bias_switch:
-            print("Computing bias on initialization...")
-            self.compute_bias(time_period=30)  # Automatically compute bias on init; adjust time_period as needed
-        else:
-            pass
+
         # Configure an NI Task with differential channels
         self.task = nidaqmx.Task()
         phys_clean = phys.replace(", ", ",")  # NI prefers no spaces
@@ -59,6 +54,13 @@ class NIDAQReaderDual:
         )
 
         self.task.start()
+
+        self.nidaq_bias = np.zeros(self.sensor_len,)  # Placeholder for bias; can be set by compute_bias()
+        if bias_switch:
+            print("Computing bias on initialization...")
+            self.compute_bias(time_period=bias_time)  # Automatically compute bias on init; adjust time_period as needed
+        else:
+            pass
 
     def _read_cal(self, path):
         """Parse an ATI .cal XML file and return a robust 6x6 matrix in Fx,Fy,Fz,Tx,Ty,Tz row order."""
@@ -98,7 +100,7 @@ class NIDAQReaderDual:
             elif abs(FT_arr[9]) >= 450 or abs(FT_arr[10]) >= 450 or abs(FT_arr[11]) >= 450:
                 print("Warning: Sensor 2 Torque approaching Limit!")
 
-            FT_biased = FT_arr - self.bias
+            FT_biased = FT_arr - self.nidaq_bias
             return FT_biased
         else:
             print("No samples available, returning zeros.")
@@ -121,7 +123,7 @@ class NIDAQReaderDual:
             time.sleep(1 / self.aq_rate)
         
         bias = pd.read_csv(self.bias_save_path, delimiter=',', header=None).mean().values
-        self.bias = np.array(bias).reshape(self.sensor_len,)
+        self.nidaq_bias = np.array(bias).reshape(self.sensor_len,)
         bias_json = {"NIDAQ_S1": bias[0:6].tolist(),
                      "NIDAQ_S2": bias[6:12].tolist()}
         with open(self.bias_json_path, 'w') as json_file:

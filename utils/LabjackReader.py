@@ -18,7 +18,7 @@ class LabjackATIReader:
       [Fx,Fy,Fz,Tx,Ty,Tz]
     """
 
-    def __init__(self, cal_path, aq_rate=60, bias_switch = True):
+    def __init__(self, cal_path, aq_rate=60, bias_time=30, bias_switch = True):
         # Guard: make failure explicit if LJM isn't installed/available
         if ljm is None:
             raise RuntimeError("labjack.ljm not available. Install LabJack LJM.")
@@ -34,18 +34,16 @@ class LabjackATIReader:
         self.bias_save_path = f"sensor_bias/bias_csv/Labjack_Bias.csv"
         self.bias_json_path = f"sensor_bias/bias_json/Labjack_Bias.json"
 
-        self.bias = np.zeros(self.sensor_len,)  # Placeholder for bias; can be set by compute_bias()
-        if bias_switch:
-            print("Computing bias on initialization...")
-            self.compute_bias(time_period=30)  # Automatically compute bias on init; adjust time_period as needed
-        else:
-            pass
+
 
         self.channels = [f"AIN{i}" for i in range(0, 12, 2)]  # AIN0,2,4,6,8,10
         self.num_channels = len(self.channels)
         self.channel_address = ljm.namesToAddresses(self.num_channels, self.channels)[0]
+
         self.scan_rate = int(aq_rate)  # Hz
-        self.scans_per_read = 1
+        print(f"Configuring LabJack stream with {self.num_channels} channels at {self.scan_rate} Hz...")
+
+        self.scans_per_read = 4
         try:
             ljm.eStreamStop(self.handle)
         except ljm.LJMError as e:
@@ -53,6 +51,13 @@ class LabjackATIReader:
                 raise 
         actual_rate = ljm.eStreamStart(self.handle, self.scans_per_read, self.num_channels, self.channel_address, self.scan_rate)
         print(f"Stream started at {actual_rate:.2f} Hz\n")
+
+        self.labjack_bias = np.zeros(self.sensor_len,)  # Placeholder for bias; can be set by compute_bias()
+        if bias_switch:
+            print("Computing bias on initialization...")
+            self.compute_bias(time_period=bias_time)  # Automatically compute bias on init; adjust time_period as needed
+        else:
+            pass
 
 
     def _read_cal(self, path):
@@ -74,10 +79,12 @@ class LabjackATIReader:
     def read(self):
         data = ljm.eStreamRead(self.handle)
         # Read the last scan of voltages for the configured channels
-        voltages = np.array(data[0]).reshape(( self.num_channels, self.scans_per_read))
+        voltages = np.array(data[0]).reshape((self.num_channels, self.scans_per_read))
+        latest_voltages = voltages[:, -1]  # Take the most recent scan
+        # print(f"Latest voltages: {latest_voltages.shape}")
 
         # Calculate forces and torques
-        forces_torques = np.dot(self.calibration_matrix, voltages)
+        forces_torques = np.dot(self.calibration_matrix, latest_voltages)
 
         # Assign forces and torques
         FT_lis = forces_torques.flatten()
@@ -87,7 +94,7 @@ class LabjackATIReader:
         elif abs(FT_lis[3]) >= 240 or abs(FT_lis[4]) >= 240 or abs(FT_lis[5]) >= 240:
             print("Warning: Torque approaching Limit!")
             
-        FT_biased = FT_lis - self.bias
+        FT_biased = FT_lis - self.labjack_bias
         return FT_biased
     
     def compute_bias(self, time_period = 30):
@@ -104,10 +111,10 @@ class LabjackATIReader:
                 write = csv.writer(csvfile)
                 write.writerow(FT_arr)
             itr += 1
-            time.sleep(1 / self.scan_rate)
+            # time.sleep(1 / self.scan_rate)
         
         bias = pd.read_csv(self.bias_save_path, delimiter=',', header=None).mean().values
-        self.bias = np.array(bias).reshape(self.sensor_len,)
+        self.labjack_bias = np.array(bias).reshape(self.sensor_len,)
         bias_json = {"Labjack": bias.tolist()}
         with open(self.bias_json_path, 'w') as json_file:
             json.dump(bias_json, json_file, indent=4)
@@ -120,11 +127,11 @@ class LabjackATIReader:
             pass
 
 if __name__ == "__main__":
-    lj = LabjackATIReader("ATI_calibration.cal", aq_rate=60)
+    lj = LabjackATIReader("calibration_files/FT44297.cal", aq_rate=60, bias_time=5)
     try:
         while True:
             FT_lis = lj.read()
-            print(FT_lis)
-            time.sleep(1 / lj.scan_rate)
+            print(f"Labjack Readings: Fx: {FT_lis[0]:.2f}, Fy: {FT_lis[1]:.2f}, Fz: {FT_lis[2]:.2f}, Tx: {FT_lis[3]:.2f}, Ty: {FT_lis[4]:.2f}, Tz: {FT_lis[5]:.2f}")
+            # time.sleep(1 / lj.scan_rate)
     except KeyboardInterrupt:
         lj.close()
