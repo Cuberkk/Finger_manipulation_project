@@ -17,11 +17,13 @@ class NIDAQReaderDual:
       Sensor2: [Fx,Fy,Fz,Tx,Ty,Tz] indices 6..11
     """
 
-    def __init__(self, cal1_path, cal2_path, aq_rate=60, phys="Dev1/ai0:7,Dev1/ai16:19"):
+    def __init__(self, cal1_path, cal2_path, aq_rate=60, phys="Dev1/ai0:7,Dev1/ai16:19", bias_switch = True):
         # Guard: make failure explicit if NI-DAQmx isn't installed/available
         if nidaqmx is None:
             raise RuntimeError("nidaqmx not available. Install NI-DAQmx driver + Python package.")
         self.aq_rate = int(aq_rate)
+
+        self.sensor_len = 12
 
         # Parse ATI .cal files (each → 6x6 matrix)
         self.cal1 = self._read_cal(cal1_path)
@@ -36,8 +38,12 @@ class NIDAQReaderDual:
         
         self.bias_save_path = f"sensor_bias/bias_csv/NIDAQ_Bias.csv"
         self.bias_json_path = f"sensor_bias/bias_json/NIDAQ_Bias.json"
-        self.bias = np.zeros(12,)  # Placeholder for bias; can be set by compute_bias()
-
+        self.bias = np.zeros(self.sensor_len,)  # Placeholder for bias; can be set by compute_bias()
+        if bias_switch:
+            print("Computing bias on initialization...")
+            self.compute_bias(time_period=30)  # Automatically compute bias on init; adjust time_period as needed
+        else:
+            pass
         # Configure an NI Task with differential channels
         self.task = nidaqmx.Task()
         phys_clean = phys.replace(", ", ",")  # NI prefers no spaces
@@ -69,10 +75,10 @@ class NIDAQReaderDual:
                 raise ValueError(f'Axis {n} has {len(vals)} values (expect 6)')
             rows.append(vals)
         return np.array(rows).reshape(6, 6)
-
-    def read_raw(self):
+        
+    def read(self):
         """
-        Get one calibrated 12-element vector for the two NI sensors.
+        Get one calibrated 12-element vector for the two NI sensors with bias subtracted.
         Returns: np.ndarray shape (12,)
         """
         samples_available = self.task.in_stream.avail_samp_per_chan
@@ -80,7 +86,7 @@ class NIDAQReaderDual:
         if samples_available > 0:
             # Discard old samples to minimize latency; keep only the most recent
             raw_data = self.task.read(number_of_samples_per_channel=samples_available)
-            volts = np.array(raw_data)[:, -1].reshape(12,)
+            volts = np.array(raw_data)[:, -1].reshape(self.sensor_len,)
             FT_arr = self.matrix.dot(volts).flatten()
             if abs(FT_arr[0]) >= 24 or abs(FT_arr[1]) >= 24 or abs(FT_arr[2]) >= 24:
                 print("Warning: Sensor 1 Force approaching Limit!")
@@ -91,43 +97,19 @@ class NIDAQReaderDual:
                 print("Warning: Sensor 2 Force approaching Limit!")
             elif abs(FT_arr[9]) >= 450 or abs(FT_arr[10]) >= 450 or abs(FT_arr[11]) >= 450:
                 print("Warning: Sensor 2 Torque approaching Limit!")
-            return FT_arr
-        else:
-            print("No samples available, returning zeros.")
-            return np.zeros(12)
-        
-    def read_biased(self):
-        """
-        Get one calibrated 12-element vector for the two NI sensors with bias subtracted.
-        Returns: np.ndarray shape (12,)
-        """
-        samples_available = self.task.in_stream.avail_samp_per_chan
-        # print(f"Samples available: {samples_available}")
-        if samples_available > 0:
-            # Discard old samples to minimize latency; keep only the most recent
-            raw_data = self.task.read(number_of_samples_per_channel=samples_available)
-            volts = np.array(raw_data)[:, -1].reshape(12,)
-            FT_arr = self.matrix.dot(volts).flatten() - self.bias
-            if abs(FT_arr[0]) >= 24 or abs(FT_arr[1]) >= 24 or abs(FT_arr[2]) >= 24:
-                print("Warning: Sensor 1 Force approaching Limit!")
-            elif abs(FT_arr[3]) >= 240 or abs(FT_arr[4]) >= 240 or abs(FT_arr[5]) >= 240:
-                print("Warning: Sensor 1 Torque approaching Limit!")
 
-            if abs(FT_arr[6]) >= 45 or abs(FT_arr[7]) >= 45 or abs(FT_arr[8]) >= 265:
-                print("Warning: Sensor 2 Force approaching Limit!")
-            elif abs(FT_arr[9]) >= 450 or abs(FT_arr[10]) >= 450 or abs(FT_arr[11]) >= 450:
-                print("Warning: Sensor 2 Torque approaching Limit!")
-            return FT_arr
+            FT_biased = FT_arr - self.bias
+            return FT_biased
         else:
             print("No samples available, returning zeros.")
-            return np.zeros(12)
+            return np.zeros(self.sensor_len,)
         
     def compute_bias(self, time_period = 30):
         total_frames = int(self.aq_rate * time_period)
         print(f"Computing bias over {time_period} seconds ({total_frames} frames at {self.aq_rate} Hz)...")
         itr = 0
         while itr < total_frames:
-            FT_arr = self.read_raw()
+            FT_arr = self.read()
             if np.all(FT_arr == 0):
                 print("No samples available during bias computation, skipping this frame.")
                 continue
@@ -139,7 +121,7 @@ class NIDAQReaderDual:
             time.sleep(1 / self.aq_rate)
         
         bias = pd.read_csv(self.bias_save_path, delimiter=',', header=None).mean().values
-        self.bias = np.array(bias).reshape(12,)
+        self.bias = np.array(bias).reshape(self.sensor_len,)
         bias_json = {"NIDAQ_S1": bias[0:6].tolist(),
                      "NIDAQ_S2": bias[6:12].tolist()}
         with open(self.bias_json_path, 'w') as json_file:

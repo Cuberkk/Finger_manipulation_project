@@ -50,9 +50,6 @@ class ContactEstimator:
             print()
             return FT_finger, -theta, h
 
-def compute_contact_theta():
-    return
-
 def main():
     nidaq_cal1_path = "calibration_files/FT44298.cal"
     nidaq_cal2_path = "calibration_files/FT45281.cal"

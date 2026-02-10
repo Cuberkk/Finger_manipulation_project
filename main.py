@@ -8,6 +8,7 @@ from utils.MeshVisualizer import MeshVisualizer
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    window = MeshVisualizer()
+    # Type can be "nidaq", "labjack", or "all" to visualize different sensor data
+    window = MeshVisualizer(sensor_type="nidaq")
     window.show()
     sys.exit(app.exec_())
