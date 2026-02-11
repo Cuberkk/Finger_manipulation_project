@@ -37,3 +37,5 @@ When performing PCA on combined force and torque data, `StandardScaler` is appli
 For force-only analysis, scaling is disabled to preserve the physical magnitude relationships.
 
 ![alt text](data/roll_pitch_yaw.png)
+
+test
