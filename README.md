@@ -38,4 +38,4 @@ For force-only analysis, scaling is disabled to preserve the physical magnitude 
 
 ![alt text](data/roll_pitch_yaw.png)
 
-test
+tests
