@@ -22,6 +22,7 @@ def main(rotation_axis, test_num, record_time, user):
     first_frame = True
     all_time = record_time * 60  # Convert minutes to seconds
 
+    print()
     print("Initialization complete. Starting to read data...")
     time.sleep(2)  # Short delay before starting to read data
     try:
