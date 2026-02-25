@@ -34,23 +34,21 @@ class LabjackATIReader:
         self.bias_save_path = f"sensor_bias/bias_csv/Labjack_Bias.csv"
         self.bias_json_path = f"sensor_bias/bias_json/Labjack_Bias.json"
 
-
-
         self.channels = [f"AIN{i}" for i in range(0, 12, 2)]  # AIN0,2,4,6,8,10
         self.num_channels = len(self.channels)
-        self.channel_address = ljm.namesToAddresses(self.num_channels, self.channels)[0]
+        # self.channel_address = ljm.namesToAddresses(self.num_channels, self.channels)[0]
 
         self.scan_rate = int(aq_rate)  # Hz
-        print(f"Configuring LabJack stream with {self.num_channels} channels at {self.scan_rate} Hz...")
+        # print(f"Configuring LabJack stream with {self.num_channels} channels at {self.scan_rate} Hz...")
 
-        self.scans_per_read = 4
-        try:
-            ljm.eStreamStop(self.handle)
-        except ljm.LJMError as e:
-            if e.errorCode != 2620:
-                raise 
-        actual_rate = ljm.eStreamStart(self.handle, self.scans_per_read, self.num_channels, self.channel_address, self.scan_rate)
-        print(f"Stream started at {actual_rate:.2f} Hz\n")
+        # self.scans_per_read = 1
+        # try:
+        #     ljm.eStreamStop(self.handle)
+        # except ljm.LJMError as e:
+        #     if e.errorCode != 2620:
+        #         raise 
+        # actual_rate = ljm.eStreamStart(self.handle, self.scans_per_read, self.num_channels, self.channel_address, self.scan_rate)
+        # print(f"Stream started at {actual_rate:.2f} Hz\n")
 
         self.labjack_bias = np.zeros(self.sensor_len,)  # Placeholder for bias; can be set by compute_bias()
         if bias_switch:
@@ -77,14 +75,15 @@ class LabjackATIReader:
         return np.array(rows).reshape(6, 6)
     
     def read(self):
-        data = ljm.eStreamRead(self.handle)
+        # data = ljm.eStreamRead(self.handle)
+        data = ljm.eReadNames(self.handle, self.num_channels, self.channels)
         # Read the last scan of voltages for the configured channels
-        voltages = np.array(data[0]).reshape((self.num_channels, self.scans_per_read))
-        latest_voltages = voltages[:, -1]  # Take the most recent scan
+        # voltages = np.array(data[0]).reshape((self.num_channels, self.scans_per_read))
+        voltages = np.array(data).reshape((self.num_channels, 1))
         # print(f"Latest voltages: {latest_voltages.shape}")
 
         # Calculate forces and torques
-        forces_torques = np.dot(self.calibration_matrix, latest_voltages)
+        forces_torques = np.dot(self.calibration_matrix, voltages)
 
         # Assign forces and torques
         FT_lis = forces_torques.flatten()
@@ -132,6 +131,6 @@ if __name__ == "__main__":
         while True:
             FT_lis = lj.read()
             print(f"Labjack Readings: Fx: {FT_lis[0]:.2f}, Fy: {FT_lis[1]:.2f}, Fz: {FT_lis[2]:.2f}, Tx: {FT_lis[3]:.2f}, Ty: {FT_lis[4]:.2f}, Tz: {FT_lis[5]:.2f}")
-            # time.sleep(1 / lj.scan_rate)
+            time.sleep(1 / (lj.scan_rate*2))
     except KeyboardInterrupt:
         lj.close()

@@ -137,7 +137,7 @@ class NIDAQReaderDual:
             pass
 
 if __name__ == "__main__":
-    ni = NIDAQReaderDual("calibration_files/FT44298.cal", "calibration_files/FT45281.cal", aq_rate=60)
+    ni = NIDAQReaderDual("calibration_files/FT44298.cal", "calibration_files/FT45281.cal", aq_rate=60, bias_time=5,)
     itr = 0
     try:
         while True:

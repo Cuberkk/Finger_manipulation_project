@@ -5,15 +5,15 @@ import os
 from utils.MainReader import MainReader
 from utils.Contact_estimator import ContactEstimator
 
-def main(rotation_axis, test_num, record_time):
+def main(rotation_axis, test_num, record_time, user):
     nidaq_cal1_path = "calibration_files/FT44298.cal"
     nidaq_cal2_path = "calibration_files/FT45281.cal"
     labjack_cal_path = "calibration_files/FT44297.cal"
     bias_time = 5
-    aq_hz = 200
+    aq_hz = 30
     bias_switch = True
     print(f"Rotation axis: {rotation_axis}, Test number: {test_num}")
-    save_dir = f"data/{rotation_axis}/test_{test_num}"
+    save_dir = f"data/{user}/{rotation_axis}/test_{test_num}"
     os.makedirs(save_dir, exist_ok=True)
     raw_data_filename = f"{save_dir}/raw_data.csv"
     biased_data_filename = f"{save_dir}/transformed_data.csv"
@@ -33,6 +33,7 @@ def main(rotation_axis, test_num, record_time):
                 start_time = time.time()
             else:
                 mode = 'a'
+            loop_start_time = time.time()
             FT_raw = reader.read()
             FT_transformed = contact_estimator.estimate_contact_tri(FT_raw)
 
@@ -45,13 +46,14 @@ def main(rotation_axis, test_num, record_time):
                 biased_writer.writerow(FT_transformed)
                 
             end_time = time.time()
+            # print(f"Frame recorded. Loop time: {end_time - loop_start_time:.2f} seconds", end='\r')
             elapsed_time = end_time - start_time
             print(f"Elapsed time: {elapsed_time:.2f} seconds", end='\r')
             if elapsed_time >= all_time:  # Stop after the specified record time
                 reader.close()
                 print(f"\nFinished {record_time} minutes of data collection.")
                 break
-            time.sleep(1 / (aq_hz*6))
+            time.sleep(1 / (aq_hz*2))
     except KeyboardInterrupt:
         reader.close()
     return
@@ -61,5 +63,6 @@ if __name__ == "__main__":
     parser.add_argument("-q","--rotation_axis", type=str, default="yaw", help="Rotation axis for the manipulation")
     parser.add_argument("-t", "--test_num", type=int, default=1, help="Number of tests")
     parser.add_argument("-r", "--record_time", type=float, default=0.5, help="Test time in minutes")
+    parser.add_argument("-u", "--user", type=str, default="kaiwen", help="User name")
     args = parser.parse_args()
-    main(args.rotation_axis, args.test_num, args.record_time)
+    main(args.rotation_axis, args.test_num, args.record_time, args.user)
