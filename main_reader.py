@@ -5,15 +5,15 @@ import os
 from utils.MainReader import MainReader
 from utils.Contact_estimator import ContactEstimator
 
-def main(rotation_axis, test_num, record_time, user):
+def main(rotation_axis, test_num, record_time, user, diameter):
     nidaq_cal1_path = "calibration_files/FT44298.cal"
     nidaq_cal2_path = "calibration_files/FT45281.cal"
     labjack_cal_path = "calibration_files/FT44297.cal"
     bias_time = 5
     aq_hz = 30
     bias_switch = True
-    print(f"Rotation axis: {rotation_axis}, Test number: {test_num}")
-    save_dir = f"data/{user}/{rotation_axis}/test_{test_num}"
+    print(f"Rotation axis: {rotation_axis}, Test number: {test_num}, Diameter: {diameter}mm")
+    save_dir = f"data/{diameter}mm/{user}/{rotation_axis}/test_{test_num}"
     os.makedirs(save_dir, exist_ok=True)
     raw_data_filename = f"{save_dir}/raw_data.csv"
     biased_data_filename = f"{save_dir}/transformed_data.csv"
@@ -54,7 +54,7 @@ def main(rotation_axis, test_num, record_time, user):
                 reader.close()
                 print(f"\nFinished {record_time} minutes of data collection.")
                 break
-            time.sleep(1 / (aq_hz*2))
+            time.sleep(1 / (aq_hz*1.5))
     except KeyboardInterrupt:
         reader.close()
     return
@@ -65,5 +65,6 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--test_num", type=int, default=1, help="Number of tests")
     parser.add_argument("-r", "--record_time", type=float, default=0.5, help="Test time in minutes")
     parser.add_argument("-u", "--user", type=str, default="kaiwen", help="User name")
+    parser.add_argument("-d", "--diameter", type=int, default=50, help="Diameter of the finger")
     args = parser.parse_args()
-    main(args.rotation_axis, args.test_num, args.record_time, args.user)
+    main(args.rotation_axis, args.test_num, args.record_time, args.user, args.diameter)

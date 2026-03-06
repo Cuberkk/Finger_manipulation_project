@@ -21,36 +21,40 @@ class ContactEstimator:
         self.threshold_lis = [thresh_1, thresh_2, thresh_1]
         return
     
-    def estimate_contact(self, FT_arr, force_threshold=0.25):
+    def estimate_contact(self, FT_arr, force_threshold=0.25, debug_flag=False):
         total_force = np.linalg.norm(FT_arr[0:3])
-        if total_force < force_threshold:  # If force is too small, skip
-            return np.zeros(6), 0, 0
-        else:
-            FT_prime = self.g_adj.dot(FT_arr)
-            FT_finger = np.zeros(6)
-            FT_finger[0] = FT_prime[1]  # Fx
-            
-            phi = math.atan(FT_prime[0]/-FT_prime[2])
-            # phi = np.clip(phi, -np.pi/2, np.pi/2)
-            # print(f"phi: {phi/np.pi*180:.2f}")
-            numerator = (FT_prime[0]* self.l + FT_prime[4])
-            demominator = self.radius * np.sqrt(FT_prime[0]**2 + FT_prime[2]**2)
-            sine_value = numerator / demominator
-            sine_value = np.clip(sine_value, -1.0, 1.0)  # Ensure the value is within the valid range for arcsin
-            # print(f"sine_value: {sine_value:.4f}")
-            theta = (math.asin(sine_value) - phi)
-            # print(f"theta: {theta/np.pi*180:.2f}")
-            FT_finger[1] = -FT_prime[0]*math.cos(theta) + FT_prime[2]*math.sin(theta)  # Fy
-            FT_finger[2] = FT_prime[0]*math.sin(theta) + FT_prime[2]*math.cos(theta)  # Fz
-            delta_h = (FT_prime[5] - FT_prime[1] *self.radius*math.sin(theta)) / FT_prime[0]
-            # print(f"delta_h: {delta_h:.2f}")
-            h = self.H + delta_h
-            h = np.clip(h, 0, self.height)
-            # print(f"h: {h:.2f}")
-            # print(f"FT_finger: {FT_finger}")
-            # print(f"FT_prime: {FT_prime}")
-            # print()
-            return FT_finger, -theta, h
+        # if total_force < force_threshold:  # If force is too small, skip
+        #     return np.zeros(6), 0, 0
+        # else:
+        FT_prime = self.g_adj.dot(FT_arr)
+        FT_finger = np.zeros(6)
+        FT_finger[0] = FT_prime[1]  # Fx
+        
+        phi = math.atan(FT_prime[0]/-FT_prime[2])
+        # phi = np.clip(phi, -np.pi/2, np.pi/2)
+        # print(f"phi: {phi/np.pi*180:.2f}")
+        numerator = (FT_prime[0]* self.l + FT_prime[4])
+        demominator = self.radius * np.sqrt(FT_prime[0]**2 + FT_prime[2]**2)
+        sine_value = numerator / demominator
+        sine_value = np.clip(sine_value, -1.0, 1.0)  # Ensure the value is within the valid range for arcsin
+        # print(f"sine_value: {sine_value:.4f}")
+        theta = (math.asin(sine_value) - phi)
+
+        FT_finger[1] = -FT_prime[0]*math.cos(theta) + FT_prime[2]*math.sin(theta)  # Fy
+        FT_finger[2] = FT_prime[0]*math.sin(theta) + FT_prime[2]*math.cos(theta)  # Fz
+        delta_h = (FT_prime[5] - FT_prime[1] *self.radius*math.sin(theta)) / FT_prime[0]
+        if debug_flag:
+            print(f"theta: {theta/np.pi*180:.2f}, Fx: {FT_finger[0]:.2f}, Fy: {FT_finger[1]:.2f}, Fz: {FT_finger[2]:.2f}")
+            if abs(FT_finger[2]) < 0.1:
+                print("Warning: Fz is very small!")
+        # print(f"delta_h: {delta_h:.2f}")
+        h = self.H + delta_h
+        h = np.clip(h, 0, self.height)
+        # print(f"h: {h:.2f}")
+        # print(f"FT_finger: {FT_finger}")
+        # print(f"FT_prime: {FT_prime}")
+        # print()
+        return FT_finger, -theta, h
         
     def estimate_contact_tri(self, FT_arr):
         s1 = FT_arr[0:6]
@@ -58,7 +62,11 @@ class ContactEstimator:
         s3 = FT_arr[12:18]
         fings_lis = []
         for i, s in enumerate([s1, s2, s3]):
-            ft_finger, theta, h = self.estimate_contact(s, self.threshold_lis[i])
+            if i == 1:
+                default_flag = False
+            else:
+                default_flag = False
+            ft_finger, theta, h = self.estimate_contact(s, self.threshold_lis[i], debug_flag=default_flag)
             fings_lis.append(ft_finger)
         fings_arr = np.array(fings_lis).flatten()
         return fings_arr
