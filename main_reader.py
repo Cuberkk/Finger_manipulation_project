@@ -13,7 +13,7 @@ def main(rotation_axis, test_num, record_time, user, diameter):
     aq_hz = 30
     bias_switch = True
     print(f"Rotation axis: {rotation_axis}, Test number: {test_num}, Diameter: {diameter}mm")
-    save_dir = f"data/{diameter}mm/{user}/{rotation_axis}/test_{test_num}"
+    save_dir = f"data/raw_data/{diameter}mm/{user}/{rotation_axis}/test_{test_num}"
     os.makedirs(save_dir, exist_ok=True)
     raw_data_filename = f"{save_dir}/raw_data.csv"
     biased_data_filename = f"{save_dir}/transformed_data.csv"
