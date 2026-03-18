@@ -18,7 +18,7 @@ def main(rotation_axis, test_num, record_time, user, diameter):
     raw_data_filename = f"{save_dir}/raw_data.csv"
     biased_data_filename = f"{save_dir}/transformed_data.csv"
     reader = MainReader(nidaq_cal1_path, nidaq_cal2_path, labjack_cal_path, bias_time, aq_hz, bias_switch)
-    contact_estimator = ContactEstimator()
+    contact_estimator = ContactEstimator(diameter=float(diameter))
     first_frame = True
     all_time = record_time * 60  # Convert minutes to seconds
 

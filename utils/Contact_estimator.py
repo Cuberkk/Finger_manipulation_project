@@ -4,7 +4,7 @@ import math
 from utils.NIDAQReaderDual import NIDAQReaderDual
 
 class ContactEstimator:
-    def __init__(self, force_error=0.25):
+    def __init__(self, force_error=0.25, diameter=80):
         radian_42 = math.radians(42)
         Rz_42 = np.array([[math.cos(radian_42), math.sin(radian_42), 0],
                         [-math.sin(radian_42), math.cos(radian_42), 0],
@@ -12,10 +12,15 @@ class ContactEstimator:
         zero3 = np.zeros((3,3))
         self.g_adj = np.block([[Rz_42, zero3],
                         [zero3, Rz_42]])
-        self.l = 27.34744 # unit: mm
-        self.height = 21.993 # unit: mm
-        self.H = 21.993 /2 # unit: mm
-        self.radius = 40 # unit: mm
+        if diameter == 80:
+            self.radius = 40
+            self.height = 21.993
+            self.l = 27.34744
+        elif diameter == 50:
+            self.radius = diameter / 2 + 1.1
+            self.height = 21.993
+            self.l = 21.778
+        self.H = self.height /2 # unit: mm
         thresh_1 = np.linalg.norm([force_error, force_error, force_error])
         thresh_2 = np.linalg.norm([force_error*3, force_error*3, force_error*3])
         self.threshold_lis = [thresh_1, thresh_2, thresh_1]
